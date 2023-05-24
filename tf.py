@@ -61,6 +61,12 @@ def make_batches(ds):
         .map(prepare_batch, tf.data.AUTOTUNE)
         .prefetch(buffer_size=tf.data.AUTOTUNE))
 
+LOG_VALUE = 2
+
+def printLog(text, value):
+    if value & LOG_VALUE != 0:
+        print(text)
+
 # Create training and validation set batches.
 train_batches = make_batches(train_examples)
 val_batches = make_batches(val_examples)
@@ -95,15 +101,13 @@ class PositionalEmbedding(tf.keras.layers.Layer):
         return self.embedding.compute_mask(*args, **kwargs)
 
     def call(self, x):
+        printLog(f'positional embedding', 1)
         length = tf.shape(x)[1]
         x = self.embedding(x)
         # This factor sets the relative scale of the embedding and positonal_encoding.
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
         x = x + self.pos_encoding[tf.newaxis, :length, :]
         return x
-
-embed_pt = PositionalEmbedding(vocab_size=tokenizers.pt.get_vocab_size(), d_model=512)
-embed_en = PositionalEmbedding(vocab_size=tokenizers.en.get_vocab_size(), d_model=512)
 
 class BaseAttention(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
@@ -114,6 +118,7 @@ class BaseAttention(tf.keras.layers.Layer):
 
 class CrossAttention(BaseAttention):
     def call(self, x, context):
+        printLog(f'cross attention', 1)
         attn_output, attn_scores = self.mha(
             query=x,
             key=context,
@@ -130,6 +135,7 @@ class CrossAttention(BaseAttention):
 
 class GlobalSelfAttention(BaseAttention):
     def call(self, x):
+        printLog(f'global self attention', 1)
         attn_output = self.mha(
             query=x,
             value=x,
@@ -140,6 +146,7 @@ class GlobalSelfAttention(BaseAttention):
 
 class CausalSelfAttention(BaseAttention):
     def call(self, x):
+        printLog(f'causal self attention', 1)
         attn_output = self.mha(
             query=x,
             value=x,
@@ -161,6 +168,7 @@ class FeedForward(tf.keras.layers.Layer):
         self.layer_norm = tf.keras.layers.LayerNormalization()
 
     def call(self, x):
+        printLog(f'feed forward', 1)
         x = self.add([x, self.seq(x)])
         x = self.layer_norm(x) 
         return x
@@ -177,6 +185,7 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.ffn = FeedForward(d_model, dff)
 
     def call(self, x):
+        printLog(f'encoder_layer', 1)
         x = self.self_attention(x)
         x = self.ffn(x)
         return x
@@ -201,6 +210,7 @@ class Encoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
 
     def call(self, x):
+        printLog(f'encoder', 1)
         # `x` is token-IDs shape: (batch, seq_len)
         x = self.pos_embedding(x)  # Shape `(batch_size, seq_len, d_model)`.
 
@@ -234,6 +244,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.ffn = FeedForward(d_model, dff)
 
     def call(self, x, context):
+        printLog(f'decoder_layer', 1)
         x = self.causal_self_attention(x=x)
         x = self.cross_attention(x=x, context=context)
 
@@ -262,6 +273,7 @@ class Decoder(tf.keras.layers.Layer):
         self.last_attn_scores = None
 
     def call(self, x, context):
+        printLog(f'decoder', 1)
         # `x` is token-IDs shape (batch, target_seq_len)
         x = self.pos_embedding(x)  # (batch_size, target_seq_len, d_model)
 
@@ -292,6 +304,7 @@ class Transformer(tf.keras.Model):
         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
 
     def call(self, inputs):
+        printLog(f'transfromer: {inputs[0]}', 1)
         # To use a Keras model with `.fit` you must pass all your inputs in the
         # first argument.
         context, x  = inputs
@@ -374,13 +387,13 @@ learning_rate = CustomSchedule(d_model)
 optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98,
                                      epsilon=1e-9)
 
-transformer.compile(
-    loss=masked_loss,
-    optimizer=optimizer,
-    metrics=[masked_accuracy])
-transformer.fit(train_batches,
-                epochs=1,
-                validation_data=val_batches)
+# transformer.compile(
+#     loss=masked_loss,
+#     optimizer=optimizer,
+#     metrics=[masked_accuracy])
+# transformer.fit(train_batches,
+#                 epochs=1,
+#                 validation_data=val_batches)
 
 class Translator(tf.Module):
     def __init__(self, tokenizers, transformer):
@@ -416,6 +429,7 @@ class Translator(tf.Module):
             predictions = predictions[:, -1:, :]  # Shape `(batch_size, 1, vocab_size)`.
 
             predicted_id = tf.argmax(predictions, axis=-1)
+            printLog(predicted_id, 2)
 
             # Concatenate the `predicted_id` to the output which is given to the
             # decoder as its input.
@@ -450,8 +464,6 @@ ground_truth = 'this is a problem we have to solve .'
 
 translated_text, translated_tokens, attention_weights = translator(tf.constant(sentence))
 print_translation(sentence, translated_text, ground_truth)
-
-
 
 
 
