@@ -55,7 +55,7 @@ def generate_random_data(n):
 
     return data
 
-def batchify_data(data, batch_size=32, padding=False, padding_token=-1):
+def batchify_data(data, batch_size=16, padding=False, padding_token=-1):
     batches = []
     for idx in range(0, len(data), batch_size):
         # We make sure we dont get the last bit if its not batch_size size
@@ -81,8 +81,8 @@ def batchify_data(data, batch_size=32, padding=False, padding_token=-1):
 
     return batches
 
-t_data = generate_random_data(900)
-v_data = generate_random_data(300)
+t_data = generate_random_data(90)
+v_data = generate_random_data(30)
 
 t_dataloader = batchify_data(t_data)
 v_dataloader = batchify_data(v_data)
