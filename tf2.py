@@ -14,6 +14,7 @@ from pathlib import Path
 import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f'Using: {device}')
 
 try:
     tokenizer = Tokenizer.from_file('tokenizer')
@@ -21,43 +22,29 @@ except:
     tokenizer = Tokenizer(BPE())
     tokenizer.pre_tokenizer = Whitespace()
     trainer = BpeTrainer()
+    tokenizer.add_special_tokens(["[<START>]","[<END>]"])
     tokenizer.train(files=utils.getFiles('transcripts/'), trainer=trainer)
     tokenizer.save('tokenizer', pretty=False)
 
 vocab_size = tokenizer.get_vocab_size()
 model = Transformer(vocab_size, vocab_size, 0, 0, device=device)
+try:
+    model.load_state_dict(torch.load('model'))
+    model.eval()
+except:
+    print('Can\'t load previous Model')
 
 def generate_random_data(n):
-    SOS_token = np.array([2])
-    EOS_token = np.array([3])
+    SOS_token = np.array([10])
+    EOS_token = np.array([11])
     length = 8
 
     data = []
 
-    # 1,1,1,1,1,1 -> 1,1,1,1,1
-    for i in range(n // 3):
-        X = np.concatenate((SOS_token, np.ones(length), EOS_token))
-        y = np.concatenate((SOS_token, np.ones(length), EOS_token))
-        data.append([X, y])
-
-    # 0,0,0,0 -> 0,0,0,0
-    for i in range(n // 3):
-        X = np.concatenate((SOS_token, np.zeros(length), EOS_token))
-        y = np.concatenate((SOS_token, np.zeros(length), EOS_token))
-        data.append([X, y])
-
     # 1,0,1,0 -> 1,0,1,0,1
-    for i in range(n // 3):
-        X = np.zeros(length)
-        start = random.randint(0, 1)
-
-        X[start::2] = 1
-
-        y = np.zeros(length)
-        if X[-1] == 0:
-            y[::2] = 1
-        else:
-            y[1::2] = 1
+    for i in range(n):
+        X = np.random.randint(3, size=length)
+        y = np.copy(X)
 
         X = np.concatenate((SOS_token, X, EOS_token))
         y = np.concatenate((SOS_token, y, EOS_token))
@@ -68,7 +55,7 @@ def generate_random_data(n):
 
     return data
 
-def batchify_data(data, batch_size=16, padding=False, padding_token=-1):
+def batchify_data(data, batch_size=32, padding=False, padding_token=-1):
     batches = []
     for idx in range(0, len(data), batch_size):
         # We make sure we dont get the last bit if its not batch_size size
@@ -94,8 +81,8 @@ def batchify_data(data, batch_size=16, padding=False, padding_token=-1):
 
     return batches
 
-t_data = generate_random_data(9000)
-v_data = generate_random_data(3000)
+t_data = generate_random_data(900)
+v_data = generate_random_data(300)
 
 t_dataloader = batchify_data(t_data)
 v_dataloader = batchify_data(v_data)
@@ -211,3 +198,4 @@ print(y_expected)
 out = torch.argmax(out, 2)
 print(out)
 
+torch.save(model.state_dict(), 'model')
