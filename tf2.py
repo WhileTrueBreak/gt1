@@ -13,6 +13,8 @@ from pathlib import Path
 
 import random
 
+modelFile = 'model.param'
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f'Using: {device}')
 
@@ -29,10 +31,10 @@ except:
 vocab_size = tokenizer.get_vocab_size()
 model = Transformer(vocab_size, vocab_size, 0, 0, device=device)
 try:
-    model.load_state_dict(torch.load('model'))
+    model.load_state_dict(torch.load(modelFile))
     model.eval()
 except:
-    print('Can\'t load previous Model')
+    print('Can\'t load previous model')
 
 def generate_random_data(n):
     SOS_token = np.array([10])
@@ -198,4 +200,4 @@ print(y_expected)
 out = torch.argmax(out, 2)
 print(out)
 
-torch.save(model.state_dict(), 'model')
+torch.save(model.state_dict(), modelFile)
