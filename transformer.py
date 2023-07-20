@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class SelfAttention(nn.Module):
     def __init__(self, embed_size, heads):
         super(SelfAttention, self).__init__()
@@ -66,7 +65,6 @@ class SelfAttention(nn.Module):
 
         return out
 
-
 class TransformerBlock(nn.Module):
     def __init__(self, embed_size, heads, dropout, forward_expansion):
         super(TransformerBlock, self).__init__()
@@ -90,7 +88,6 @@ class TransformerBlock(nn.Module):
         forward = self.feed_forward(x)
         out = self.dropout(self.norm2(forward + x))
         return out
-
 
 class Encoder(nn.Module):
     def __init__(
@@ -139,7 +136,6 @@ class Encoder(nn.Module):
 
         return out
 
-
 class DecoderBlock(nn.Module):
     def __init__(self, embed_size, heads, forward_expansion, dropout, device):
         super(DecoderBlock, self).__init__()
@@ -155,7 +151,6 @@ class DecoderBlock(nn.Module):
         query = self.dropout(self.norm(attention + x))
         out = self.transformer_block(value, key, query, src_mask)
         return out
-
 
 class Decoder(nn.Module):
     def __init__(
@@ -194,7 +189,6 @@ class Decoder(nn.Module):
         out = self.fc_out(x)
 
         return out
-
 
 class Transformer(nn.Module):
     def __init__(

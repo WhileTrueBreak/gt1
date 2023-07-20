@@ -1,6 +1,8 @@
 from transformer import Transformer
 import utils
 
+from tokenizerTest import generateData
+
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
@@ -29,7 +31,7 @@ except:
     tokenizer.save('tokenizer', pretty=False)
 
 vocab_size = tokenizer.get_vocab_size()
-model = Transformer(vocab_size, vocab_size, 0, 0, device=device)
+model = Transformer(vocab_size, vocab_size, 0, 0, device=device).cuda()
 try:
     model.load_state_dict(torch.load(modelFile))
     model.eval()
@@ -74,20 +76,18 @@ def batchify_data(data, batch_size=16, padding=False, padding_token=-1):
 
                 # Append X padding tokens until it reaches the max length
                 for seq_idx in range(batch_size):
-                    remaining_length = max_bath_length - len(data[idx + seq_idx])
+                    remaining_length = max_batch_length - len(data[idx + seq_idx])
                     data[idx + seq_idx] += [padding_token] * remaining_length
-
-            batches.append(np.array(data[idx : idx + batch_size]).astype(np.int64))
+            x = []
+            y = []
+            for d in data[idx : idx + batch_size]:
+                x.append(d[0])
+                y.append(d[1])
+            batches.append([np.array(x).astype(np.int64), np.array(y).astype(np.int64)])
 
     print(f"{len(batches)} batches of size {batch_size}")
 
     return batches
-
-t_data = generate_random_data(90)
-v_data = generate_random_data(30)
-
-t_dataloader = batchify_data(t_data)
-v_dataloader = batchify_data(v_data)
 
 opt = torch.optim.SGD(model.parameters(), lr=0.01)
 loss_fn = nn.CrossEntropyLoss()
@@ -101,9 +101,11 @@ def train_loop(model, opt, loss_fn, dataloader):
     model.train()
     total_loss = 0
     
-    for batch in dataloader:
-        X, y = batch[:, 0], batch[:, 1]
-        X, y = torch.tensor(X).to(device), torch.tensor(y).to(device)
+    for i,batch in enumerate(dataloader):
+        print(f'\ttraining: {i+1}/{len(dataloader)}\r', end='')
+        X, y = batch[0], batch[1]
+        X = torch.tensor(X).to(device)
+        y = torch.tensor(y).to(device)
 
         # Now we shift the tgt by one so with the <SOS> we predict the token at pos 1
         y_input = y[:,:-1]
@@ -124,6 +126,7 @@ def train_loop(model, opt, loss_fn, dataloader):
         opt.step()
     
         total_loss += loss.detach().item()
+    print()
         
     return total_loss / len(dataloader)
 
@@ -137,8 +140,9 @@ def validation_loop(model, loss_fn, dataloader):
     total_loss = 0
     
     with torch.no_grad():
-        for batch in dataloader:
-            X, y = batch[:, 0], batch[:, 1]
+        for i,batch in enumerate(dataloader):
+            print(f'\tvalidating: {i+1}/{len(dataloader)}\r', end='')
+            X, y = batch[0], batch[1]
             X, y = torch.tensor(X, dtype=torch.long, device=device), torch.tensor(y, dtype=torch.long, device=device)
 
             # Now we shift the tgt by one so with the <SOS> we predict the token at pos 1
@@ -158,6 +162,7 @@ def validation_loop(model, loss_fn, dataloader):
             loss = loss_fn(pred, y_expected)
             total_loss += loss.detach().item()
         
+    print()
     return total_loss / len(dataloader)
 
 def fit(model, opt, loss_fn, train_dataloader, val_dataloader, epochs):
@@ -176,28 +181,48 @@ def fit(model, opt, loss_fn, train_dataloader, val_dataloader, epochs):
         train_loss = train_loop(model, opt, loss_fn, train_dataloader)
         train_loss_list += [train_loss]
         
+        print(f"Training loss: {train_loss:.4f}")
+        
         validation_loss = validation_loop(model, loss_fn, val_dataloader)
         validation_loss_list += [validation_loss]
         
-        print(f"Training loss: {train_loss:.4f}")
         print(f"Validation loss: {validation_loss:.4f}")
         print()
+        torch.save(model.state_dict(), modelFile)
         
     return train_loss_list, validation_loss_list
 
-train_loss_list, validation_loss_list = fit(model, opt, loss_fn, t_dataloader, v_dataloader, 10)
+
+for i in range(1000):
+    t_data = generateData(9000)
+    v_data = generateData(300)
+
+    t_dataloader = batchify_data(t_data, batch_size=100)
+    v_dataloader = batchify_data(v_data, batch_size=100)
+    train_loss_list, validation_loss_list = fit(model, opt, loss_fn, t_dataloader, v_dataloader, 10)
 
 batch = v_dataloader[0]
-X, y = batch[:, 0], batch[:, 1]
+X, y = batch[0], batch[1]
 X, y = torch.tensor(X).to(device), torch.tensor(y).to(device)
 y_input = y[:,:-1]
 y_expected = y[:,1:]
 out = model(X, y_input)
 
+out = torch.argmax(out, 2)
+
+in_ = np.array(X.cpu())
+exp_ = np.array(y_expected.cpu())
+act_ = np.array(out.cpu())
+
+for i in range(len(in_)):
+    print(f'in:  {tokenizer.decode(in_[i])}')
+    print(f'exp: {tokenizer.decode(exp_[i])}')
+    print(f'act: {tokenizer.decode(act_[i])}')
+    print(act_[i])
+
+exit()
+
+
 print(X)
 print(y_expected)
-
-out = torch.argmax(out, 2)
 print(out)
-
-torch.save(model.state_dict(), modelFile)
